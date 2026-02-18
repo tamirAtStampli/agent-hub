@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Agent Hub - Multi-Agent Collaboration</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            primary: '#6366f1',
+            secondary: '#8b5cf6',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    .gradient-bg {
+      background: linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #1e1b4b 100%);
+    }
+    .message-user {
+      background: linear-gradient(135deg, #4f46e5 0%, #6366f1 100%);
+    }
+    .message-agent {
+      background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+    }
+    .agent-claude { border-left-color: #f97316; }
+    .agent-chatgpt { border-left-color: #10b981; }
+    .agent-gemini { border-left-color: #3b82f6; }
+    .typing-indicator::after {
+      content: '...';
+      animation: dots 1.5s infinite;
+    }
+    @keyframes dots {
+      0%, 20% { content: '.'; }
+      40% { content: '..'; }
+      60%, 100% { content: '...'; }
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .thinking-bubble {
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    .mention {
+      background: rgba(99, 102, 241, 0.3);
+      padding: 0 4px;
+      border-radius: 4px;
+      color: #a5b4fc;
+    }
+    .discussion-active {
+      border-left: 3px solid #10b981;
+    }
+  </style>
+</head>
+<body class="gradient-bg min-h-screen text-white">
+  <div id="app" class="flex h-screen">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900/50 backdrop-blur-sm border-r border-gray-700/50 flex flex-col">
+      <div class="p-4 border-b border-gray-700/50">
+        <h1 class="text-xl font-bold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          Agent Hub
+        </h1>
+        <p class="text-xs text-gray-400 mt-1">Multi-Agent Collaboration</p>
+      </div>
+
+      <!-- Mode Selection -->
+      <div class="p-4 border-b border-gray-700/50">
+        <label class="text-xs text-gray-400 uppercase tracking-wide">Mode</label>
+        <select id="mode-select" class="mt-2 w-full bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="shared-room">Shared Room (Parallel)</option>
+          <option value="real-time-discussion">Discussion (Dynamic)</option>
+          <option value="structured-debate">Structured Debate</option>
+          <option value="consensus">Consensus (Voting)</option>
+        </select>
+        <p id="mode-description" class="text-xs text-gray-500 mt-2">All agents respond to each message</p>
+      </div>
+
+      <!-- Agents -->
+      <div class="flex-1 overflow-auto p-4">
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-xs text-gray-400 uppercase tracking-wide">Agents</label>
+          <button onclick="refreshAgents()" class="text-xs text-indigo-400 hover:text-indigo-300">Refresh</button>
+        </div>
+        <div id="agents-list" class="space-y-2">
+          <!-- Agents will be loaded here -->
+        </div>
+      </div>
+
+      <!-- Settings Button -->
+      <div class="p-4 border-t border-gray-700/50">
+        <button onclick="openSettings()" class="w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 rounded-lg text-sm flex items-center justify-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+          Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col">
+      <!-- Header -->
+      <header class="px-6 py-4 border-b border-gray-700/50 bg-gray-900/30 backdrop-blur-sm">
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 id="room-title" class="font-semibold">New Conversation</h2>
+            <p id="room-subtitle" class="text-sm text-gray-400">Ask a question to get started</p>
+          </div>
+          <div class="flex items-center gap-4">
+            <button onclick="newConversation()" class="px-3 py-1.5 text-sm bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              New Chat
+            </button>
+            <div id="status-indicator" class="flex items-center gap-2 text-sm text-gray-400">
+              <span class="w-2 h-2 bg-green-500 rounded-full"></span>
+              Ready
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <!-- Thinking Indicators -->
+      <div id="thinking-indicators" class="hidden px-6 py-2 bg-gray-900/50 border-b border-gray-700/30">
+        <div class="flex items-center gap-3 text-sm text-gray-400">
+          <span class="thinking-bubble">💭</span>
+          <span id="thinking-agents"></span>
+        </div>
+      </div>
+
+      <!-- Messages -->
+      <div id="messages" class="flex-1 overflow-auto p-6 space-y-4">
+        <div class="text-center text-gray-500 py-12">
+          <div class="text-4xl mb-4">🤖</div>
+          <p class="text-lg">Welcome to Agent Hub</p>
+          <p class="text-sm mt-2">Configure your agents in the sidebar, then ask a question below.</p>
+          <p class="text-sm text-gray-600 mt-4">
+            Research shows diverse AI models collaborating achieve 91% accuracy vs 82% for single models.
+          </p>
+        </div>
+      </div>
+
+      <!-- Input -->
+      <div class="p-4 border-t border-gray-700/50 bg-gray-900/30 backdrop-blur-sm">
+        <div class="max-w-4xl mx-auto">
+          <form id="message-form" class="flex gap-3">
+            <input
+              type="text"
+              id="message-input"
+              placeholder="Ask a question, start a debate, or seek consensus..."
+              class="flex-1 bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none focus:border-transparent"
+            />
+            <button
+              type="submit"
+              id="send-btn"
+              class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 rounded-xl font-medium transition-colors flex items-center gap-2"
+            >
+              <span>Send</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+              </svg>
+            </button>
+          </form>
+          <div class="flex flex-wrap items-center gap-2 mt-3">
+            <button onclick="setMode('shared-room')" class="mode-btn px-3 py-1 text-xs rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
+              💬 Ask All
+            </button>
+            <button onclick="setMode('real-time-discussion')" class="mode-btn px-3 py-1 text-xs rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
+              🗣️ Discussion
+            </button>
+            <button onclick="setMode('structured-debate')" class="mode-btn px-3 py-1 text-xs rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
+              ⚔️ Debate
+            </button>
+            <button onclick="setMode('consensus')" class="mode-btn px-3 py-1 text-xs rounded-full bg-gray-800 hover:bg-gray-700 transition-colors">
+              🗳️ Consensus
+            </button>
+            <label id="force-respond-label" class="hidden items-center gap-2 text-xs text-gray-400 ml-auto cursor-pointer">
+              <input type="checkbox" id="force-respond" class="rounded bg-gray-700 border-gray-600 text-indigo-500 focus:ring-indigo-500">
+              Force all to respond
+            </label>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="hidden fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+    <div class="bg-gray-800 rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-auto">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-lg font-semibold">Settings</h3>
+        <button onclick="closeSettings()" class="text-gray-400 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Discussion Settings -->
+      <div class="mb-6">
+        <h4 class="text-sm font-medium text-indigo-400 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"></path>
+          </svg>
+          Discussion Settings
+        </h4>
+        <div class="bg-gray-700/50 rounded-lg p-4 space-y-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-gray-300">Max messages per turn</label>
+              <span id="max-messages-value" class="text-sm text-indigo-400 font-medium">5</span>
+            </div>
+            <input type="range" id="max-messages-per-turn" min="1" max="20" value="5"
+                   oninput="updateDiscussionConfig('maxMessagesPerTurn', this.value)"
+                   class="w-full mt-2 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            <p class="text-xs text-gray-500 mt-1">How many agent messages before waiting for user input</p>
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-gray-300">Agent cooldown (seconds)</label>
+              <span id="cooldown-value" class="text-sm text-indigo-400 font-medium">10s</span>
+            </div>
+            <input type="range" id="agent-cooldown" min="1" max="60" value="10"
+                   oninput="updateDiscussionConfig('agentCooldownMs', this.value * 1000)"
+                   class="w-full mt-2 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            <p class="text-xs text-gray-500 mt-1">Time before same agent can respond again</p>
+          </div>
+          <div>
+            <div class="flex items-center justify-between">
+              <label class="text-sm text-gray-300">Max concurrent responses</label>
+              <span id="concurrent-value" class="text-sm text-indigo-400 font-medium">3</span>
+            </div>
+            <input type="range" id="max-concurrent" min="1" max="10" value="3"
+                   oninput="updateDiscussionConfig('maxConcurrentResponses', this.value)"
+                   class="w-full mt-2 h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+            <p class="text-xs text-gray-500 mt-1">How many agents can respond simultaneously</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Agent Settings -->
+      <div>
+        <h4 class="text-sm font-medium text-indigo-400 mb-3 flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path>
+          </svg>
+          Agent Configuration
+        </h4>
+        <div id="settings-content" class="space-y-4">
+          <!-- Agent settings will be loaded here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '';
+    let currentMode = 'shared-room';
+    let currentRoomId = null;  // Track current conversation room
+    let agents = [];
+    let ws = null;
+    let thinkingAgents = new Set();  // Track agents currently thinking
+    
+    // Discussion configuration
+    let discussionConfig = {
+      maxMessagesPerTurn: 5,
+      agentCooldownMs: 10000,
+      maxConcurrentResponses: 3
+    };
+
+    function updateDiscussionConfig(key, value) {
+      discussionConfig[key] = parseInt(value);
+      
+      // Update display values
+      if (key === 'maxMessagesPerTurn') {
+        document.getElementById('max-messages-value').textContent = value;
+      } else if (key === 'agentCooldownMs') {
+        document.getElementById('cooldown-value').textContent = (value / 1000) + 's';
+        document.getElementById('agent-cooldown').value = value / 1000;
+      } else if (key === 'maxConcurrentResponses') {
+        document.getElementById('concurrent-value').textContent = value;
+      }
+      
+      console.log('Discussion config updated:', discussionConfig);
+    }
+
+    // Initialize WebSocket
+    function initWebSocket() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      ws = new WebSocket(`${protocol}//${window.location.host}`);
+      
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        handleEvent(data);
+      };
+
+      ws.onclose = () => {
+        setTimeout(initWebSocket, 3000);
+      };
+    }
+
+    function handleEvent(event) {
+      if (event.type === 'message') {
+        // Don't add user messages from WebSocket - we already display them immediately
+        if (event.data.sender === 'user') return;
+        addMessage(event.data);
+      } else if (event.type === 'agent_thinking') {
+        thinkingAgents.add(event.data.agentName);
+        updateThinkingIndicator();
+      } else if (event.type === 'agent_done_thinking') {
+        // Find agent name by ID
+        const agent = agents.find(a => a.id === event.data.agentId);
+        if (agent) thinkingAgents.delete(agent.name);
+        updateThinkingIndicator();
+      } else if (event.type === 'discussion_started') {
+        console.log('Discussion started:', event.data);
+      } else if (event.type === 'discussion_stopped') {
+        console.log('Discussion stopped:', event.data);
+        thinkingAgents.clear();
+        updateThinkingIndicator();
+      }
+    }
+
+    function updateThinkingIndicator() {
+      const container = document.getElementById('thinking-indicators');
+      const agentsSpan = document.getElementById('thinking-agents');
+      
+      if (thinkingAgents.size > 0) {
+        container.classList.remove('hidden');
+        const names = Array.from(thinkingAgents);
+        if (names.length === 1) {
+          agentsSpan.textContent = `${names[0]} is thinking...`;
+        } else {
+          agentsSpan.textContent = `${names.join(', ')} are thinking...`;
+        }
+      } else {
+        container.classList.add('hidden');
+      }
+    }
+
+    // Load agents
+    async function refreshAgents() {
+      try {
+        const res = await fetch(`${API_BASE}/api/agents`);
+        agents = await res.json();
+        renderAgents();
+      } catch (error) {
+        console.error('Failed to load agents:', error);
+      }
+    }
+
+    function renderAgents() {
+      const list = document.getElementById('agents-list');
+      list.innerHTML = agents.map(agent => {
+        const healthIcon = agent.health?.status === 'healthy' ? '🟢' : 
+                          agent.health?.status === 'disabled' ? '⚪' : '🔴';
+        const statusClass = agent.enabled ? 'bg-indigo-600' : 'bg-gray-600';
+        
+        return `
+          <div class="bg-gray-800/50 rounded-lg p-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span>${healthIcon}</span>
+                <span class="font-medium">${agent.name}</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" ${agent.enabled ? 'checked' : ''} 
+                       onchange="toggleAgent('${agent.id}', this.checked)"
+                       class="sr-only peer">
+                <div class="w-9 h-5 bg-gray-600 peer-checked:bg-indigo-600 rounded-full peer-focus:ring-2 peer-focus:ring-indigo-500 after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:after:translate-x-full"></div>
+              </label>
+            </div>
+            <div class="text-xs text-gray-500 mt-1">${agent.config?.model || 'No model set'}</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function toggleAgent(id, enabled) {
+      try {
+        await fetch(`${API_BASE}/api/agents/${id}/${enabled ? 'enable' : 'disable'}`, {
+          method: 'POST'
+        });
+        refreshAgents();
+      } catch (error) {
+        console.error('Failed to toggle agent:', error);
+      }
+    }
+
+    // Messages
+    function addMessage(message) {
+      const container = document.getElementById('messages');
+      
+      // Remove welcome message if present
+      const welcome = container.querySelector('.text-center');
+      if (welcome) welcome.remove();
+
+      const isUser = message.sender === 'user';
+      const agentClass = message.sender === 'claude' ? 'agent-claude' :
+                        message.sender === 'chatgpt' ? 'agent-chatgpt' :
+                        message.sender === 'gemini' ? 'agent-gemini' : '';
+
+      const el = document.createElement('div');
+      el.className = `${isUser ? 'message-user ml-auto' : 'message-agent border-l-4 ' + agentClass} 
+                      max-w-3xl rounded-xl p-4 ${isUser ? 'text-right' : ''}`;
+      
+      el.innerHTML = `
+        <div class="text-xs ${isUser ? 'text-indigo-200' : 'text-gray-400'} mb-1">
+          ${message.senderName}
+          ${message.confidence ? `<span class="ml-2">(${(message.confidence * 100).toFixed(0)}% confidence)</span>` : ''}
+        </div>
+        <div class="text-sm whitespace-pre-wrap">${formatContent(message.content)}</div>
+      `;
+      
+      container.appendChild(el);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function formatContent(text) {
+      // Escape HTML first
+      let html = escapeHtml(text);
+      // Highlight @mentions
+      html = html.replace(/@([\w-]+)/g, '<span class="mention">@$1</span>');
+      return html;
+    }
+
+    // Send message
+    document.getElementById('message-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const input = document.getElementById('message-input');
+      const message = input.value.trim();
+      if (!message) return;
+
+      input.value = '';
+      setLoading(true);
+
+      try {
+        // Add user message immediately
+        addMessage({
+          sender: 'user',
+          senderName: 'You',
+          content: message
+        });
+
+        let result;
+
+        // For debate and consensus, use dedicated endpoints (they manage their own rooms)
+        if (currentMode === 'structured-debate') {
+          const res = await fetch(`${API_BASE}/api/debate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic: message, rounds: 4 })
+          });
+          result = await res.json();
+        } else if (currentMode === 'consensus') {
+          const res = await fetch(`${API_BASE}/api/consensus`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ question: message })
+          });
+          result = await res.json();
+        } else if (currentMode === 'real-time-discussion') {
+          // Discussion mode - agents decide whether to respond
+          if (!currentRoomId) {
+            // Create a new room and start discussion
+            const roomRes = await fetch(`${API_BASE}/api/rooms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'Discussion', mode: 'real-time-discussion' })
+            });
+            const room = await roomRes.json();
+            currentRoomId = room.id;
+            
+            // Start the discussion with config
+            await fetch(`${API_BASE}/api/rooms/${currentRoomId}/start-discussion`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config: discussionConfig })
+            });
+            
+            document.getElementById('room-subtitle').textContent = `Discussion active (max ${discussionConfig.maxMessagesPerTurn} msgs/turn)`;
+          }
+
+          // Send message to discussion room
+          const forceAllRespond = document.getElementById('force-respond')?.checked || false;
+          const res = await fetch(`${API_BASE}/api/rooms/${currentRoomId}/discussion/message`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message, forceAllRespond })
+          });
+          result = await res.json();
+          
+          // In discussion mode, agents respond asynchronously via WebSocket
+          // Don't wait for them here
+        } else {
+          // Shared room mode - continue conversation in same room
+          if (!currentRoomId) {
+            // Create a new room for this conversation
+            const roomRes = await fetch(`${API_BASE}/api/rooms`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ name: 'Conversation', mode: 'shared-room' })
+            });
+            const room = await roomRes.json();
+            currentRoomId = room.id;
+            document.getElementById('room-subtitle').textContent = 'Conversation in progress...';
+          }
+
+          // Send message to existing room
+          const res = await fetch(`${API_BASE}/api/rooms/${currentRoomId}/messages`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message })
+          });
+          result = await res.json();
+        }
+        
+        // Agent messages are handled via WebSocket in real-time
+        // Only handle special synthesis/consensus results
+        
+        if (result.synthesis) {
+          addMessage({
+            sender: 'system',
+            senderName: 'Synthesis',
+            content: result.synthesis
+          });
+        }
+
+        if (result.reached !== undefined) {
+          addMessage({
+            sender: 'system',
+            senderName: 'Consensus Result',
+            content: result.reached 
+              ? `✅ Consensus reached (${(result.confidence * 100).toFixed(1)}%)\n\n${result.answer}`
+              : `❌ No consensus (${(result.confidence * 100).toFixed(1)}%)`
+          });
+        }
+
+      } catch (error) {
+        console.error('Failed to send message:', error);
+        addMessage({
+          sender: 'system',
+          senderName: 'Error',
+          content: 'Failed to get response. Check that agents are configured.'
+        });
+      } finally {
+        setLoading(false);
+      }
+    });
+    
+    // Start new conversation
+    function newConversation() {
+      currentRoomId = null;
+      thinkingAgents.clear();
+      updateThinkingIndicator();
+      
+      document.getElementById('messages').innerHTML = `
+        <div class="text-center text-gray-500 py-12">
+          <div class="text-4xl mb-4">🤖</div>
+          <p class="text-lg">Welcome to Agent Hub</p>
+          <p class="text-sm mt-2">Configure your agents in the sidebar, then ask a question below.</p>
+          <p class="text-sm text-gray-600 mt-4">
+            Research shows diverse AI models collaborating achieve 91% accuracy vs 82% for single models.
+          </p>
+        </div>
+      `;
+      
+      const titles = {
+        'shared-room': 'New Conversation',
+        'real-time-discussion': 'New Discussion',
+        'structured-debate': 'New Debate',
+        'consensus': 'New Consensus'
+      };
+      const subtitles = {
+        'shared-room': 'Ask a question to get started',
+        'real-time-discussion': 'Start a discussion - agents respond dynamically',
+        'structured-debate': 'Enter a topic to debate',
+        'consensus': 'Ask a question to seek consensus'
+      };
+      
+      document.getElementById('room-title').textContent = titles[currentMode] || 'New Conversation';
+      document.getElementById('room-subtitle').textContent = subtitles[currentMode] || 'Ask a question to get started';
+    }
+
+    function setLoading(loading) {
+      const btn = document.getElementById('send-btn');
+      const status = document.getElementById('status-indicator');
+      
+      if (loading) {
+        btn.disabled = true;
+        btn.innerHTML = '<span class="typing-indicator">Thinking</span>';
+        status.innerHTML = '<span class="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></span> Processing...';
+      } else {
+        btn.disabled = false;
+        btn.innerHTML = '<span>Send</span><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"></path></svg>';
+        status.innerHTML = '<span class="w-2 h-2 bg-green-500 rounded-full"></span> Ready';
+      }
+    }
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('mode-select').value = mode;
+      
+      const titles = {
+        'shared-room': 'Shared Room',
+        'real-time-discussion': 'Discussion',
+        'structured-debate': 'Structured Debate',
+        'consensus': 'Consensus Voting'
+      };
+      const subtitles = {
+        'shared-room': 'All agents respond in parallel',
+        'real-time-discussion': 'Agents decide when to respond dynamically',
+        'structured-debate': 'Agents debate over multiple rounds',
+        'consensus': 'Agents vote with confidence scores'
+      };
+      const descriptions = {
+        'shared-room': 'All agents respond to each message',
+        'real-time-discussion': 'Dynamic chat - agents decide whether to respond. Use @mentions to address specific agents.',
+        'structured-debate': 'Agents argue positions over multiple rounds',
+        'consensus': 'Agents vote with confidence, seeks agreement'
+      };
+      
+      document.getElementById('room-title').textContent = titles[mode];
+      document.getElementById('room-subtitle').textContent = subtitles[mode];
+      document.getElementById('mode-description').textContent = descriptions[mode];
+      
+      // Show/hide force-respond checkbox (only for discussion mode)
+      const forceRespondLabel = document.getElementById('force-respond-label');
+      if (mode === 'real-time-discussion') {
+        forceRespondLabel.classList.remove('hidden');
+        forceRespondLabel.classList.add('flex');
+      } else {
+        forceRespondLabel.classList.add('hidden');
+        forceRespondLabel.classList.remove('flex');
+      }
+      
+      // Reset room when mode changes
+      if (currentRoomId) {
+        newConversation();
+      }
+    }
+
+    document.getElementById('mode-select').addEventListener('change', (e) => {
+      setMode(e.target.value);
+    });
+
+    // Settings
+    function openSettings() {
+      document.getElementById('settings-modal').classList.remove('hidden');
+      renderSettings();
+    }
+
+    function closeSettings() {
+      document.getElementById('settings-modal').classList.add('hidden');
+    }
+
+    // Available models per agent type
+    const AVAILABLE_MODELS = {
+      claude: [
+        { id: 'claude-sonnet-4-20250514', name: 'Claude Sonnet 4' },
+        { id: 'claude-opus-4-20250514', name: 'Claude Opus 4' },
+        { id: 'claude-3-5-sonnet-20241022', name: 'Claude 3.5 Sonnet' },
+        { id: 'claude-3-5-haiku-20241022', name: 'Claude 3.5 Haiku' },
+        { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus' },
+        { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet' },
+        { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku' }
+      ],
+      chatgpt: [
+        { id: 'gpt-4o', name: 'GPT-4o' },
+        { id: 'gpt-4o-mini', name: 'GPT-4o Mini' },
+        { id: 'gpt-4-turbo', name: 'GPT-4 Turbo' },
+        { id: 'gpt-4', name: 'GPT-4' },
+        { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
+        { id: 'o1', name: 'o1' },
+        { id: 'o1-mini', name: 'o1 Mini' },
+        { id: 'o1-preview', name: 'o1 Preview' }
+      ],
+      gemini: [
+        { id: 'gemini-2.0-flash', name: 'Gemini 2.0 Flash' },
+        { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash Lite' },
+        { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro' },
+        { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash' },
+        { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash 8B' }
+      ],
+      bedrock: [
+        { id: 'anthropic.claude-3-5-sonnet-20240620-v1:0', name: 'Claude 3.5 Sonnet' },
+        { id: 'anthropic.claude-3-sonnet-20240229-v1:0', name: 'Claude 3 Sonnet' },
+        { id: 'anthropic.claude-3-haiku-20240307-v1:0', name: 'Claude 3 Haiku' },
+        { id: 'anthropic.claude-3-opus-20240229-v1:0', name: 'Claude 3 Opus' },
+        { id: 'meta.llama3-70b-instruct-v1:0', name: 'Llama 3 70B' },
+        { id: 'meta.llama3-8b-instruct-v1:0', name: 'Llama 3 8B' },
+        { id: 'mistral.mistral-large-2402-v1:0', name: 'Mistral Large' },
+        { id: 'mistral.mixtral-8x7b-instruct-v0:1', name: 'Mixtral 8x7B' },
+        { id: 'amazon.titan-text-premier-v1:0', name: 'Titan Text Premier' }
+      ]
+    };
+
+    function getModelsForAgent(agentType) {
+      return AVAILABLE_MODELS[agentType] || [];
+    }
+
+    function renderModelOptions(agentType, selectedModel) {
+      const models = getModelsForAgent(agentType);
+      if (models.length === 0) {
+        return '<option value="">No models available</option>';
+      }
+      return models.map(model => 
+        `<option value="${model.id}" ${model.id === selectedModel ? 'selected' : ''}>${model.name}</option>`
+      ).join('');
+    }
+
+    function renderSettings() {
+      const content = document.getElementById('settings-content');
+      content.innerHTML = agents.map(agent => `
+        <div class="bg-gray-700/50 rounded-lg p-4">
+          <div class="font-medium mb-3">${agent.name}</div>
+          <div class="space-y-3">
+            <div>
+              <label class="text-xs text-gray-400">API Key</label>
+              <input type="password" 
+                     value="${agent.config?.apiKey || ''}"
+                     placeholder="Enter API key..."
+                     onchange="updateConfig('${agent.id}', 'apiKey', this.value)"
+                     class="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+            </div>
+            <div>
+              <label class="text-xs text-gray-400">Model</label>
+              <select onchange="updateConfig('${agent.id}', 'model', this.value)"
+                      class="w-full mt-1 bg-gray-800 border border-gray-600 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none cursor-pointer">
+                ${renderModelOptions(agent.type, agent.config?.model)}
+              </select>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function updateConfig(agentId, key, value) {
+      try {
+        await fetch(`${API_BASE}/api/agents/${agentId}/config`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ [key]: value })
+        });
+        refreshAgents();
+      } catch (error) {
+        console.error('Failed to update config:', error);
+      }
+    }
+
+    // Initialize
+    refreshAgents();
+    initWebSocket();
+  </script>
+</body>
+</html>

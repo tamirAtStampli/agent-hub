@@ -1,0 +1,55 @@
+{
+  "name": "agent-hub",
+  "version": "1.0.0",
+  "description": "Multi-Agent Collaboration Hub - Where AI agents work together as a team",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agent-hub": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "cli": "tsx src/cli/index.ts",
+    "mcp": "tsx src/mcp/server.ts",
+    "web": "tsx src/web/server.ts",
+    "test": "tsx --test src/**/*.test.ts"
+  },
+  "keywords": [
+    "ai",
+    "agents",
+    "multi-agent",
+    "collaboration",
+    "claude",
+    "chatgpt",
+    "gemini",
+    "mcp"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.978.0",
+    "@google/generative-ai": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "better-sqlite3": "^11.0.0",
+    "commander": "^13.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "openai": "^4.104.0",
+    "uuid": "^11.0.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/cors": "^2.8.0",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "@types/uuid": "^10.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
